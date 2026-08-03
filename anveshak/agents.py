@@ -7,12 +7,13 @@ from dataclasses import asdict, dataclass
 from typing import Any
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+from xml.etree import ElementTree
 
 STOPWORDS = {"about", "after", "among", "and", "are", "can", "for", "from", "how", "into", "its", "of", "on", "or", "the", "to", "using", "what", "with"}
 
 @dataclass
 class Paper:
-    title: str; authors: str; year: int | None; venue: str; abstract: str; citations: int; url: str; source: str
+    title: str; authors: str; year: int | None; venue: str; abstract: str; citations: int; url: str; source: str; pdf_url: str = ""
     def public(self) -> dict[str, Any]: return asdict(self)
 
 def keywords(text: str, limit: int = 12) -> list[str]:
@@ -30,13 +31,24 @@ class LiteratureRetrievalAgent:
                 if title:
                     authors = ", ".join(f"{a.get('given','')} {a.get('family','')}".strip() for a in item.get("author", [])[:3]) or "Unknown"
                     year = item.get("published", {}).get("date-parts", [[None]])[0][0]
-                    papers.append(Paper(title, authors, year, (item.get("container-title") or [""])[0], re.sub("<.*?>", "", item.get("abstract", "")), item.get("is-referenced-by-count", 0), item.get("URL", ""), "Crossref"))
+                papers.append(Paper(title, authors, year, (item.get("container-title") or [""])[0], re.sub("<.*?>", "", item.get("abstract", "")), item.get("is-referenced-by-count", 0), item.get("URL", ""), "Crossref"))
             sources.append("Crossref")
         except Exception: pass
         try:
             for item in self._get(f"https://api.openalex.org/works?search={quote(query)}&per-page=8")["results"]:
-                papers.append(Paper(item["title"], ", ".join(a["author"]["display_name"] for a in item.get("authorships", [])[:3]) or "Unknown", item.get("publication_year"), item.get("primary_location", {}).get("source", {}).get("display_name", ""), "Abstract indexed by OpenAlex." if item.get("abstract_inverted_index") else "", item.get("cited_by_count", 0), item.get("doi") or item.get("id", ""), "OpenAlex"))
+                location = item.get("best_oa_location") or {}
+                papers.append(Paper(item["title"], ", ".join(a["author"]["display_name"] for a in item.get("authorships", [])[:3]) or "Unknown", item.get("publication_year"), item.get("primary_location", {}).get("source", {}).get("display_name", ""), "Abstract indexed by OpenAlex." if item.get("abstract_inverted_index") else "", item.get("cited_by_count", 0), item.get("doi") or item.get("id", ""), "OpenAlex", location.get("pdf_url") or ""))
             sources.append("OpenAlex")
+        except Exception: pass
+        try:
+            feed = self._xml(f"https://export.arxiv.org/api/query?search_query=all:{quote(query)}&start=0&max_results=6")
+            ns = {"atom": "http://www.w3.org/2005/Atom"}
+            for entry in feed.findall("atom:entry", ns):
+                url = entry.findtext("atom:id", default="", namespaces=ns)
+                authors = ", ".join(author.findtext("atom:name", default="Unknown", namespaces=ns) for author in entry.findall("atom:author", ns)[:3])
+                date = entry.findtext("atom:published", default="", namespaces=ns)
+                papers.append(Paper(entry.findtext("atom:title", default="").strip(), authors, int(date[:4]) if date[:4].isdigit() else None, "arXiv", entry.findtext("atom:summary", default="").strip(), 0, url, "arXiv", url.replace("/abs/", "/pdf/") + ".pdf"))
+            sources.append("arXiv")
         except Exception: pass
         if not papers:
             topic = " ".join(keywords(query, 5)).title() or "Research Innovation"
@@ -46,6 +58,9 @@ class LiteratureRetrievalAgent:
     @staticmethod
     def _get(url: str) -> dict[str, Any]:
         with urlopen(Request(url, headers={"User-Agent": "AnveshakAI/0.1 (research prototype)"}), timeout=6) as response: return json.load(response)
+    @staticmethod
+    def _xml(url: str) -> ElementTree.Element:
+        with urlopen(Request(url, headers={"User-Agent": "AnveshakAI/0.1 (research prototype)"}), timeout=8) as response: return ElementTree.parse(response).getroot()
 
 class PDFUnderstandingAgent:
     name = "PDF Understanding Agent"

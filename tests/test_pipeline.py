@@ -10,5 +10,6 @@ class PipelineTest(unittest.TestCase):
         report = ResearchPipeline().run("How can AI improve resilient infrastructure?")
         self.assertEqual(len(report["progress"]), 10)
         self.assertIn("overall_confidence", report["verification"])
+        self.assertIn("pdf_url", report["papers"][0])
 
 if __name__ == "__main__": unittest.main()

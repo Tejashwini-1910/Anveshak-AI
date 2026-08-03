@@ -12,6 +12,14 @@ python server.py
 
 Open `http://localhost:8000`. Enter a research question and select **Run research pipeline**. The first run uses public Crossref and OpenAlex data when reachable; a curated fallback keeps demonstrations usable offline.
 
+## Phase 2 capabilities
+
+- Voice-to-question input and spoken report summaries, using the browser Web Speech API. No voice recording is uploaded by this starter application.
+- arXiv, Crossref, and OpenAlex discovery. Each paper provides a source landing page and a Google Scholar full-text lookup.
+- Direct **Download PDF** actions appear only when OpenAlex or arXiv supplies an open-access PDF URL.
+- One-click JSON evidence export and locally stored recent research questions.
+- Evidence-first labels: novelty and gap outputs remain research hypotheses, not publication or patentability claims.
+
 ## Agent workflow
 
 1. Research Coordinator — interprets the question and plans the run.
