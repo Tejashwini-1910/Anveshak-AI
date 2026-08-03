@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
-import mimetypes
+import base64
+import io
+import re
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -11,6 +13,25 @@ from anveshak.pipeline import ResearchPipeline
 
 ROOT = Path(__file__).parent
 WEB = ROOT / "web"
+MAX_PDF_BYTES = 15 * 1024 * 1024
+
+
+def extract_pdf_upload(item: dict) -> dict:
+    name = Path(str(item.get("name", "document.pdf"))).name
+    raw = base64.b64decode(item.get("content", ""), validate=True)
+    if len(raw) > MAX_PDF_BYTES:
+        raise ValueError(f"{name} exceeds the 15 MB PDF upload limit.")
+    if not raw.startswith(b"%PDF"):
+        raise ValueError(f"{name} is not a valid PDF file.")
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(raw))
+        text = "\n".join((page.extract_text() or "") for page in reader.pages)
+        return {"name": name, "pages": len(reader.pages), "text": text[:120000], "status": "text extracted"}
+    except ImportError:
+        # Keeps the upload path usable during setup, but makes extraction status transparent.
+        preview = " ".join(match.decode("latin-1", "ignore") for match in re.findall(rb"[A-Za-z][A-Za-z0-9 ,.;:()/-]{30,}", raw))
+        return {"name": name, "pages": None, "text": preview[:12000], "status": "basic preview only — install pypdf for full extraction"}
 
 
 class AnveshakHandler(SimpleHTTPRequestHandler):
@@ -28,7 +49,8 @@ class AnveshakHandler(SimpleHTTPRequestHandler):
             query = str(payload.get("query", "")).strip()
             if len(query) < 8:
                 raise ValueError("Please enter a research question of at least 8 characters.")
-            report = ResearchPipeline().run(query=query, domains=payload.get("domains", []))
+            uploads = [extract_pdf_upload(item) for item in payload.get("uploads", [])]
+            report = ResearchPipeline().run(query=query, domains=payload.get("domains", []), uploads=uploads)
             data = json.dumps(report, ensure_ascii=False).encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/json; charset=utf-8")

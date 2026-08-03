@@ -64,13 +64,17 @@ class LiteratureRetrievalAgent:
 
 class PDFUnderstandingAgent:
     name = "PDF Understanding Agent"
-    def run(self, papers: list[Paper]) -> dict: return {"status": "ready", "summary": "Metadata and available abstracts were structured for analysis. Upload parsing can be enabled with pypdf.", "documents_processed": len(papers)}
+    def run(self, papers: list[Paper], uploads: list[dict] | None = None) -> dict:
+        uploads = uploads or []
+        documents = [{"name": item["name"], "pages": item.get("pages"), "characters": len(item.get("text", "")), "status": item.get("status", "processed")} for item in uploads]
+        return {"status": "processed", "summary": "Scholarly metadata and uploaded PDF text were structured for analysis.", "documents_processed": len(papers) + len(uploads), "uploaded_documents": documents}
 
 class SemanticAnalysisAgent:
     name = "Semantic Analysis Agent"
-    def run(self, papers: list[Paper]) -> dict:
+    def run(self, papers: list[Paper], uploaded_text: str = "") -> dict:
         terms = Counter()
         for paper in papers: terms.update(keywords(paper.title + " " + paper.abstract, 20))
+        terms.update(keywords(uploaded_text, 30))
         return {"themes": [{"name": word.title(), "mentions": count} for word, count in terms.most_common(8)], "method": "transparent frequency-based semantic baseline"}
 
 class KnowledgeGraphAgent:
@@ -104,7 +108,7 @@ class ProposalGenerationAgent:
     name = "Proposal Generation Agent"
     def run(self, query: str, themes: list[dict], gaps: dict) -> dict:
         names = ", ".join(t["name"] for t in themes[:4]) or "the retrieved themes"
-        return {"title": f"Evidence-based investigation of {query.rstrip('?')}", "objective": f"Develop and evaluate an approach addressing: {query}", "research_questions": [query, "Which measurable factors explain the observed outcomes?", "How does the approach compare with a transparent baseline?"], "methodology": f"Review evidence around {names}; define a dataset, build a baseline, evaluate with pre-registered metrics, and report limitations.", "expected_contribution": gaps["candidate_gaps"][0]}
+        return {"title": f"Evidence-based investigation of {query.rstrip('?')}", "objective": f"Develop and evaluate an approach addressing: {query}", "research_questions": [query, "Which measurable factors explain the observed outcomes?", "How does the approach compare with a transparent baseline?"], "methodology": f"Review evidence around {names}; define a dataset, build a baseline, evaluate with pre-registered metrics, and report limitations.", "expected_contribution": gaps["candidate_gaps"][0], "generation": "deterministic evidence-aware outline"}
 
 class HallucinationVerificationAgent:
     name = "Hallucination Verification Agent"
