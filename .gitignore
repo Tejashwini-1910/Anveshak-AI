@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+.env
+.venv/
+reports/
+.pytest_cache/
+
+# Large research artifacts and locally generated datasets
+data/
+datasets/
+uploads/
+models/
+artifacts/
+*.pdf
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.mp4
+*.mov
+*.avi
+*.parquet
+*.sqlite
+*.db
